@@ -45,7 +45,7 @@ def parse_int_list(s):
 @click.option('--data',          help='Path to the dataset', metavar='ZIP|DIR',                     type=str, required=True)
 @click.option('--cond',          help='Train class-conditional model', metavar='BOOL',              type=bool, default=False, show_default=True)
 @click.option('--arch',          help='Network architecture', metavar='ddpmpp|ncsnpp|adm',          type=click.Choice(['ddpmpp', 'ncsnpp', 'adm']), default='ddpmpp', show_default=True)
-@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm',       type=click.Choice(['vp', 've', 'edm']), default='edm', show_default=True)
+@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|edm_distillation',       type=click.Choice(['vp', 've', 'edm','edm_distillation']), default='edm', show_default=True)
 
 # Hyperparameters.
 @click.option('--duration',      help='Training duration', metavar='MIMG',                          type=click.FloatRange(min=0, min_open=True), default=200, show_default=True)
@@ -76,6 +76,13 @@ def parse_int_list(s):
 @click.option('--transfer',      help='Transfer learning from network pickle', metavar='PKL|URL',   type=str)
 @click.option('--resume',        help='Resume from previous training state', metavar='PT',          type=str)
 @click.option('-n', '--dry-run', help='Print training options and exit',                            is_flag=True)
+
+#新加的参数传入
+@click.option('--ratio',          help=' ', metavar='INT',              type=int,   default=2,   show_default=True)
+@click.option('--num_steps',      help=' ', metavar='INT',              type=int,   default=256,   show_default=True)
+@click.option('--sigma_min',      help=' ', metavar='FLOAT',            type=float, default=0.002, show_default=True)
+@click.option('--sigma_max',      help=' ', metavar='FLOAT',            type=float, default=80,    show_default=True)
+@click.option('--rho',            help=' ', metavar='INT',              type=int,   default=7,     show_default=True)
 
 def main(**kwargs):
     """Train diffusion-based generative model using the techniques described in the
@@ -130,10 +137,20 @@ def main(**kwargs):
     elif opts.precond == 've':
         c.network_kwargs.class_name = 'training.networks.VEPrecond'
         c.loss_kwargs.class_name = 'training.loss.VELoss'
+    elif opts.precond == 'edm_distillation' :
+        c.network_kwargs.class_name = 'training.networks.EDMPrecond'
+        c.loss_kwargs.class_name = 'training.loss.EDMDistillationLoss'
+        c.loss_kwargs.num_steps = opts.num_steps
+        c.loss_kwargs.rho = opts.rho
+        c.loss_kwargs.sigma_min = opts.sigma_min
+        c.loss_kwargs.sigma_max = opts.sigma_max
+        c.loss_kwargs.ratio= opts.ratio
+
     else:
         assert opts.precond == 'edm'
         c.network_kwargs.class_name = 'training.networks.EDMPrecond'
         c.loss_kwargs.class_name = 'training.loss.EDMLoss'
+    
 
     # Network options.
     if opts.cbase is not None:

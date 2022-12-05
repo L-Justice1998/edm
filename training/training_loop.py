@@ -83,7 +83,6 @@ def training_loop(
 
     # Setup optimizer.
     dist.print0('Setting up optimizer...')
-    loss_fn = dnnlib.util.construct_class_by_name(**loss_kwargs) # training.loss.(VP|VE|EDM)Loss
     optimizer = dnnlib.util.construct_class_by_name(params=net.parameters(), **optimizer_kwargs) # subclass of torch.optim.Optimizer
     augment_pipe = dnnlib.util.construct_class_by_name(**augment_kwargs) if augment_kwargs is not None else None # training.augment.AugmentPipe
     ddp = torch.nn.parallel.DistributedDataParallel(net, device_ids=[device], broadcast_buffers=False)
@@ -108,6 +107,17 @@ def training_loop(
         optimizer.load_state_dict(data['optimizer_state'])
         del data # conserve memory
 
+    # distillation
+
+    teacher_net = copy.deepcopy(net)
+    teacher_net = teacher_net.eval().requires_grad_(False)
+
+    if loss_kwargs.class_name == 'training.loss.EDMDistillationLoss':
+        from training.loss import EDMDistillationLoss
+        loss_fn = EDMDistillationLoss(teacher_net, device,loss_kwargs.ratio, loss_kwargs.num_steps, 
+                loss_kwargs.sigma_min, loss_kwargs.sigma_max, loss_kwargs.rho)
+    else:
+        loss_fn = dnnlib.util.construct_class_by_name(**loss_kwargs) # training.loss.(VP|VE|EDM)Loss
     # Train.
     dist.print0(f'Training for {total_kimg} kimg...')
     dist.print0()
@@ -130,6 +140,9 @@ def training_loop(
                 loss = loss_fn(net=ddp, images=images, labels=labels, augment_pipe=augment_pipe)
                 training_stats.report('Loss/loss', loss)
                 loss.sum().mul(loss_scaling / batch_gpu_total).backward()
+        with torch.no_grad():
+            loss_val = loss.sum().mul(loss_scaling / batch_gpu_total)
+
 
         # Update weights.
         for g in optimizer.param_groups:
@@ -156,7 +169,9 @@ def training_loop(
         # Print status line, accumulating the same information in training_stats.
         tick_end_time = time.time()
         fields = []
+        
         fields += [f"tick {training_stats.report0('Progress/tick', cur_tick):<5d}"]
+        fields += [f"loss {training_stats.report0('Progress/loss', loss_val):<6.2f}"]
         fields += [f"kimg {training_stats.report0('Progress/kimg', cur_nimg / 1e3):<9.1f}"]
         fields += [f"time {dnnlib.util.format_time(training_stats.report0('Timing/total_sec', tick_end_time - start_time)):<12s}"]
         fields += [f"sec/tick {training_stats.report0('Timing/sec_per_tick', tick_end_time - tick_start_time):<7.1f}"]

@@ -107,14 +107,14 @@ def training_loop(
         optimizer.load_state_dict(data['optimizer_state'])
         del data # conserve memory
 
-    # distillation
-
+    # distillation 
+    # 初始化了老师模型 传入的net做深拷贝 但是是不更新的
     teacher_net = copy.deepcopy(net)
     teacher_net = teacher_net.eval().requires_grad_(False)
-
+    #如果选择edm_distillation_loss 进入训练 其多出来的参数通过命令行传入 或者使用默认值
     if loss_kwargs.class_name == 'training.loss.EDMDistillationLoss':
         from training.loss import EDMDistillationLoss
-        loss_fn = EDMDistillationLoss(teacher_net, device,loss_kwargs.ratio, loss_kwargs.num_steps, 
+        loss_fn = EDMDistillationLoss(teacher_net, device, loss_kwargs.ratio, loss_kwargs.num_steps, 
                 loss_kwargs.sigma_min, loss_kwargs.sigma_max, loss_kwargs.rho)
     else:
         loss_fn = dnnlib.util.construct_class_by_name(**loss_kwargs) # training.loss.(VP|VE|EDM)Loss
@@ -171,6 +171,7 @@ def training_loop(
         fields = []
         
         fields += [f"tick {training_stats.report0('Progress/tick', cur_tick):<5d}"]
+        #加入了打印loss的选项
         fields += [f"loss {training_stats.report0('Progress/loss', loss_val):<6.2f}"]
         fields += [f"kimg {training_stats.report0('Progress/kimg', cur_nimg / 1e3):<9.1f}"]
         fields += [f"time {dnnlib.util.format_time(training_stats.report0('Timing/total_sec', tick_end_time - start_time)):<12s}"]

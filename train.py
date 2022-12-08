@@ -45,6 +45,7 @@ def parse_int_list(s):
 @click.option('--data',          help='Path to the dataset', metavar='ZIP|DIR',                     type=str, required=True)
 @click.option('--cond',          help='Train class-conditional model', metavar='BOOL',              type=bool, default=False, show_default=True)
 @click.option('--arch',          help='Network architecture', metavar='ddpmpp|ncsnpp|adm',          type=click.Choice(['ddpmpp', 'ncsnpp', 'adm']), default='ddpmpp', show_default=True)
+# 这里新加的edm-distillation的loss function
 @click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|edm_distillation',       type=click.Choice(['vp', 've', 'edm','edm_distillation']), default='edm', show_default=True)
 
 # Hyperparameters.
@@ -137,6 +138,7 @@ def main(**kwargs):
     elif opts.precond == 've':
         c.network_kwargs.class_name = 'training.networks.VEPrecond'
         c.loss_kwargs.class_name = 'training.loss.VELoss'
+    #这里是在precond加入edm_distillation损失函数 其可以传入的参数包括 num_steps rho sigma_min sigma_max ratio(即蒸馏的比率)
     elif opts.precond == 'edm_distillation' :
         c.network_kwargs.class_name = 'training.networks.EDMPrecond'
         c.loss_kwargs.class_name = 'training.loss.EDMDistillationLoss'

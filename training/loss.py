@@ -17,17 +17,17 @@ from skimage import io
 import datetime
 
 
-def target_to_image(target):
-    target = target.permute(0,2,3,1)
-    target = target.cpu().detach().numpy()
-    print(target[0])
+def target_to_image(target,k):
+    assert k.shape[0] == target.shape[0]
+    k = k.reshape(-1)
+    target = (target * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).cpu().numpy()
     for i in range(target.shape[0]):
         res = target[i] #得到batch中其中一步的图片
         image = Image.fromarray(np.uint8(res)).convert('RGB')
-        #通过时间命名存储结果
+        #通过时间命名和时间步存储结果
         timestamp = datetime.datetime.now().strftime("%M-%S")
-        savepath = timestamp + '_r.jpg'
-        # image.save('./target_images/'+savepath)
+        savepath = timestamp +  str(k[i]) + '.jpg'
+        image.save('./target_images/'+savepath)
 
 			
 
@@ -120,40 +120,49 @@ class EDMDistillationLoss:
         t_steps = (sigma_max ** (1 / rho) + step_indices / (num_steps - 1) * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
         self.t_steps = torch.cat([self.teacher_net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]) # t_N = 0
         self.t_steps = self.t_steps.to(device)
+        # print(self.t_steps[torch.arange(self.num_steps // self.ratio )*self.ratio])
+        # exit()
 
     def __call__(self, net,images, labels=None, augment_pipe=None):
         #这里的net就是student_net
+        # 注意，在生成代码中 采取二阶步的时候的判断条件是 i < num_steps -1
+        # 即i最多等于num_steps - 2 若是四步的则是最多等于num_steps - 4
         y, augment_labels = augment_pipe(images) if augment_pipe is not None else (images, None)
-        # 时间步 随机生成
-        i = torch.randint(0, self.num_steps // self.ratio ,(images.shape[0], 1,1,1)) * self.ratio
-        i = i.to(images.device)
+        # 时间步 随机生成 randint左闭右开，会采到[0,num_steps),不会采到num_steps
+        # i = torch.randint(0, self.num_steps - 1 ,(images.shape[0], 1,1,1)) 
+        # 这里i的取值是0到num_steps-1
+        index = torch.randint(0, (self.num_steps // self.ratio) ,(images.shape[0], 1,1,1)) * self.ratio
+        i = index.to(images.device)
 
         # 通过随机生成的时间步，索引采样到噪声的方差
         t_i = self.t_steps[i]
-        t_iplus1 = self.t_steps[i+1]
+        t_iplus1 = self.t_steps[(i+1).clamp_(max = self.num_steps - 1)]
         #因为t_iplus2不一定存在 则如果不存在直接用第i+1时间得到的方差
-        t_iplus2 = self.t_steps[(i+2).clamp_(max=self.num_steps)]
+        t_iplus2 = self.t_steps[(i+2).clamp_(max = self.num_steps - 1)]
         sigma = t_i
         weight = (sigma ** 2 + self.sigma_data ** 2) / (sigma * self.sigma_data) ** 2
         n = torch.randn_like(y) * sigma
         x_i = y + n 
-        #两次edm 确定性采样的公式
+        # 两次edm 确定性采样的公式
+        # 若t_iplus1 和t_iplus2被截断，因为截断后有相减的项是为0的，则从后往前四次NFE最多退化成只有一次NFE的情况。
         with torch.no_grad():
-            d_i =(x_i-self.teacher_net(x_i, t_i, labels, augment_labels=augment_labels))/ t_i
+            # 原edm采样公式去除噪声部分的一阶部分
+            d_i = (x_i - self.teacher_net(x_i, t_i, labels, augment_labels=augment_labels)) / t_i
             x_iplus1_bar = x_i + (t_iplus1 - t_i) * d_i
             d_i_bar = (x_iplus1_bar - self.teacher_net(x_iplus1_bar, t_iplus1, labels, 
-                        augment_labels=augment_labels))/ t_iplus1
+                        augment_labels=augment_labels)) / t_iplus1
             x_iplus1 = x_i + (t_iplus1 - t_i) * 0.5 * (d_i + d_i_bar)
 
+            # 原edm采样公式去除噪声部分的一阶部分 但是是第二次
             d_iplus1 = (x_iplus1 - self.teacher_net(x_iplus1, t_iplus1,labels, 
                         augment_labels=augment_labels)) / t_iplus1
             x_iplus2_bar = x_iplus1 + (t_iplus2 - t_iplus1) * d_iplus1
             d_iplus1_bar = (x_iplus2_bar - self.teacher_net(x_iplus2_bar,t_iplus2,labels, 
                             augment_labels=augment_labels)) / t_iplus2
             x_iplus2 = x_iplus1 + (t_iplus2 - t_iplus1) * 0.5 * (d_iplus1 + d_iplus1_bar)
-
+            # target计算
             target = x_i - (t_i/(t_iplus2-t_i)) * (x_iplus2 - x_i)
-            target_to_image(target)
+            # target_to_image(target,index)
             
         # 最终的loss
         loss = weight * ((net(x_i, t_i ,labels, augment_labels=augment_labels) - target) ** 2)

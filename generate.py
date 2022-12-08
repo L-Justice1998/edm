@@ -60,6 +60,53 @@ def edm_sampler(
     return x_next
 
 #----------------------------------------------------------------------------
+# for edm_distillation sample
+def edm_distillation_sampler(
+    #这里没指定num_steps
+    net, latents, class_labels=None, randn_like=torch.randn_like,
+    num_steps = 32, sigma_min=0.002, sigma_max=80, rho=7,
+    S_churn=0, S_min=0, S_max=float('inf'), S_noise=1,ratio = 2
+):
+    # Adjust noise levels based on what's supported by the network.
+    sigma_min = max(sigma_min, net.sigma_min)
+    sigma_max = min(sigma_max, net.sigma_max)
+
+    # Time step discretization.
+    # 这里是时间步
+    step_indices = torch.arange(num_steps, dtype=torch.float64, device=latents.device)
+    # 对应的方差schedule
+    t_steps = (sigma_max ** (1 / rho) + step_indices / (num_steps - 1) * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
+    t_steps = torch.cat([net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]) # t_N = 0
+    # 通过ratio来跳步选择需要的时间步
+    t_steps = t_steps[::ratio]
+    # Main sampling loop.
+    x_next = latents.to(torch.float64) * t_steps[0]
+    # 修改的地方在此，时间步上每隔两个取一个，且去掉二阶步，只取一阶步计算
+    for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])): # 0, ..., N-1
+        x_cur = x_next
+
+        #去掉噪声的部分 变成一个确定采样器，因为在训练过程就是一个确定过程，则在采样过程中保持一致
+        # Increase noise temporarily.
+        # gamma = min(S_churn / num_steps, np.sqrt(2) - 1) if S_min <= t_cur <= S_max else 0
+        # t_hat = net.round_sigma(t_cur + gamma * t_cur)
+        # x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * S_noise * randn_like(x_cur)
+        t_hat = net.round_sigma(t_cur)
+        x_hat = x_cur 
+
+        # Euler step.
+        denoised = net(x_hat, t_hat, class_labels).to(torch.float64)
+        d_cur = (x_hat - denoised) / t_hat
+        x_next = x_hat + (t_next - t_hat) * d_cur
+
+        # Apply 2nd order correction.
+        # if i < num_steps - 1:
+        #     denoised = net(x_next, t_next, class_labels).to(torch.float64)
+        #     d_prime = (x_next - denoised) / t_next
+        #     x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
+
+    return x_next
+
+#----------------------------------------------------------------------------
 # Generalized ablation sampler, representing the superset of all sampling
 # methods discussed in the paper.
 
@@ -174,6 +221,7 @@ def ablation_sampler(
             x_next = x_hat + h * ((1 - 1 / (2 * alpha)) * d_cur + 1 / (2 * alpha) * d_prime)
 
     return x_next
+
 
 #----------------------------------------------------------------------------
 # Wrapper for torch.Generator that allows specifying a different random seed
@@ -290,7 +338,9 @@ def main(network_pkl, outdir, subdirs, seeds, class_idx, max_batch_size, device=
         # Generate images.
         sampler_kwargs = {key: value for key, value in sampler_kwargs.items() if value is not None}
         have_ablation_kwargs = any(x in sampler_kwargs for x in ['solver', 'discretization', 'schedule', 'scaling'])
-        sampler_fn = ablation_sampler if have_ablation_kwargs else edm_sampler
+        #这里修改采样器
+        sampler_fn = ablation_sampler if have_ablation_kwargs else edm_distillation_sampler
+        # sampler_fn = ablation_sampler if have_ablation_kwargs else edm_sampler
         images = sampler_fn(net, latents, class_labels, randn_like=rnd.randn_like, **sampler_kwargs)
 
         # Save images.

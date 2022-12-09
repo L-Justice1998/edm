@@ -1,3 +1,5 @@
+#推导过程
+    https://www.overleaf.com/read/qrshfwcxtthf
 # 运行example.py
     CUDA_VISIBLE_DEVICES=1 python example.py
 
@@ -6,8 +8,7 @@ precond 表示的是损失函数的选择</p>
 num_steps 表示的是从多少步开始进行蒸馏</p>
 transfer 表示的是从哪里获得老师模型</p>
 
-
-    CUDA_VISIBLE_DEVICES=2,3 torchrun --standalone --nproc_per_node=2 train.py --outdir=training-runs \
+    CUDA_VISIBLE_DEVICES=2,3  torchrun --standalone --nproc_per_node=2 train.py --outdir=training-runs \
     --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp \
     --precond=edm_distillation\
     --batch-gpu=128\
@@ -46,7 +47,7 @@ transfer 表示的是从哪里获得老师模型</p>
 
     torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-edm-32 \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
-
+py
 测得结果是1.99815
 
 # 从蒸馏好的模型中生成图片 

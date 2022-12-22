@@ -28,26 +28,38 @@ transfer 表示的是从哪里获得老师模型</p>
 目前的实验是对于cifar10  uncond的
 ## 16步生成图像
 
-    torchrun --standalone --nproc_per_node=1 generate.py --outdir=fid-tmp-edm-16 --seeds=0-49999 --subdirs \
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-16 --seeds=0-49999 --subdirs \
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
-        --steps=16
+        --steps=16 --sampler=edm_sampler
 
 ## 测16步生成图像的fid
 
-    torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-edm-16 \
+    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-edm-16 \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
 
 测得结果是1.97306
     
 ## 32步生成图像
 
-    torchrun --standalone --nproc_per_node=1 generate.py --outdir=fid-tmp-edm-32 --seeds=0-49999 --subdirs \
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-32 --seeds=0-49999 --subdirs \
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
-        --steps=32
+        --steps=32 --sampler=edm_sampler
 
 ## 测32步生成图像的fid
 
-    torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-edm-32 \
+    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-edm-32 \
+        --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
+
+测得结果是1.99815
+## 64步生成图像
+
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-64 --seeds=0-49999 --subdirs \
+        --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
+        --steps=64 --sampler=edm_sampler
+
+## 测32步生成图像的fid
+
+    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-edm-64 \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
 
 测得结果是1.99815
@@ -62,7 +74,7 @@ transfer 表示的是从哪里获得老师模型</p>
     torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-edm-16-1nfe \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
 
-测得结果是4.09465
+测得结果是8.94814
     
 ## 32步生成图像
     torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-32-1nfe --seeds=0-49999 --subdirs \
@@ -76,16 +88,18 @@ transfer 表示的是从哪里获得老师模型</p>
 
 测得结果是4.09467
 ## 由于效果不好，考虑是否是因为NFE太少，尝试64步的一阶采样
-    torchrun --standalone --nproc_per_node=2 generate.py --outdir=fid-tmp-edm-64-1nfe --seeds=0-49999 --subdirs \
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-64-1nfe --seeds=0-49999 --subdirs \
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
-        --steps=64--sampler=edm_distillation_sampler --ratio=1
+        --steps=64 --sampler=edm_distillation_sampler --ratio=1
 
 ## 测64步生成图像的fid
 
     torchrun --standalone --nproc_per_node=2 fid.py calc --images=fid-tmp-edm-64-1nfe \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
-测得的结果是4.09465
+测得的结果是
 则说明一阶的采样效果不好。
+
+
 
 
 # 从蒸馏好的模型中生成图片 
@@ -112,12 +126,14 @@ transfer 表示的是从哪里获得老师模型</p>
 
 测得结果是2.93074
 
+
+
 ## 尝试一下将蒸馏后的模型用二阶采样
-    CUDA_VISIBLE_DEVICES=2,3 torchrun --standalone --nproc_per_node=2 generate.py --outdir=fid-tmp-edm-distillation-32-32-002509-test --seeds=0-49999 --subdirs \
+    CUDA_VISIBLE_DEVICES=2,3 torchrun --standalone --nproc_per_node=2 generate.py --outdir=fid-tmp-edm-distillation-32-32-002509-16steps --seeds=0-49999 --subdirs \
     --network='./distilltion_model/network-snapshot-32-32-002509.pkl' \
     --steps=16  --sampler=edm_sampler 
 
-    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-edm-distillation-32-32-002509-test  \
+    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-edm-distillation-32-32-002509-16steps  \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
 测得结果是3.92025
 # 由于效果不好 将一次采样步中的两次NFE蒸馏成一步 不像先前将两次采样步中的四次NFE蒸馏成一步
@@ -147,6 +163,14 @@ transfer 表示的是从哪里获得老师模型</p>
 
 
 # 基于edm采样器的效果不明显，则先对原来的ddim采样进行蒸馏
+## 先对模型进行ddim的16步采样
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-ddim-16 --seeds=0-49999 --subdirs \
+        --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
+        --steps=16 --solver=euler --disc=iddpm --schedule=linear --scaling=none
+##  fid测试
+    torchrun --standalone --nproc_per_node=4 fid.py calc --images=fid-tmp-ddim-16 \
+        --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
+测得结果是8.23425
 ## 先对模型进行ddim的32步采样
     torchrun --standalone --nproc_per_node=2 generate.py --outdir=fid-tmp-ddim-32 --seeds=0-49999 --subdirs \
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl \
@@ -165,10 +189,39 @@ transfer 表示的是从哪里获得老师模型</p>
 测得结果是3.30465
 
 ## 进行64步到32步的蒸馏 只用五千张图
-     CUDA_VISIBLE_DEVICES=2,3  torchrun --standalone --nproc_per_node=2 train.py --outdir=training-runs-new \
-    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp \
-    --precond=DDIM_distillation\
-    --batch-gpu=128\
-    --duration=5  --num_steps=64 --ratio=2\ 
+
+    CUDA_VISIBLE_DEVICES=2,3  torchrun --standalone --nproc_per_node=2 train.py --outdir=training-runs-new \
+    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=DDIM_distillation --batch-gpu=64 --duration=5  --num_steps=64 --ratio=2\ 
     --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
+    
+## 无意中运行了下面的训练 发现很快收敛 这个是将4NFE到1NFE的 初始是64步
+    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --standalone --nproc_per_node=4 train.py --outdir=training-runs-test \
+    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=edm_distillation \
+    --batch-gpu=128 --duration=0.3  --num_steps=32 --ratio=2\ 
+    --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
+    这样训练是不行的 加了ratio之后loss大概变化20->8->2->0.8->0.01 采样变成噪声
+
+    CUDA_VISIBLE_DEVICES=0,1,2,3  torchrun --standalone --nproc_per_node=4 train.py --outdir=training-runs-test \
+    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=edm_distillation \
+    --batch-gpu=128 --duration=0.3  --num_steps=32 \
+    --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
+    这样训练是好的,和gpu个数没有关系,loss大概变化20->13->6 采样是正确的
+
+
+
+
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-32-16-000300-new --seeds=0-10 --subdirs \
+        --network='./distilltion_model/network-snapshot-32-16-000300-new.pkl' \
+        --steps=32 --ratio=2 --sampler=edm_distillation_sampler
+
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-32-16-000300 --seeds=0-10 --subdirs \
+        --network='./distilltion_model/network-snapshot-32-16-000300.pkl' \
+        --steps=32 --ratio=2 --sampler=edm_distillation_sampler
+
+    torchrun --standalone --nproc_per_node=4 generate.py --outdir=test --seeds=0-10 --subdirs \
+        --network='training-runs-test/00002-cifar10-32x32-uncond-ddpmpp-edm_distillation-gpus4-batch512-fp32/network-snapshot-000300.pkl' \
+        --steps=32 --ratio=2 --sampler=edm_distillation_sampler
+    
+    
+
 

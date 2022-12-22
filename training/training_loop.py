@@ -16,6 +16,7 @@ import psutil
 import numpy as np
 import torch
 import dnnlib
+import shutil  
 from torch_utils import distributed as dist
 from torch_utils import training_stats
 from torch_utils import misc
@@ -108,7 +109,7 @@ def training_loop(
         del data # conserve memory
 
     # distillation 
-    # 初始化了老师模型 传入的net做深拷贝 但是是不更新的
+    # 初始化老师模型 传入的net做深拷贝 但是是不更新的
     teacher_net = copy.deepcopy(net)
     teacher_net = teacher_net.eval().requires_grad_(False)
     #如果选择edm_distillation_loss 进入训练 其多出来的参数通过命令行传入 或者使用默认值
@@ -116,9 +117,22 @@ def training_loop(
         from training.loss import EDMDistillationLoss
         loss_fn = EDMDistillationLoss(teacher_net, device, loss_kwargs.ratio, loss_kwargs.num_steps, 
                 loss_kwargs.sigma_min, loss_kwargs.sigma_max, loss_kwargs.rho)
+    elif loss_kwargs.class_name == 'training.loss.EDMDistillationLoss1':
+        from training.loss import EDMDistillationLoss1
+        loss_fn = EDMDistillationLoss1(teacher_net, device, loss_kwargs.ratio, loss_kwargs.num_steps, 
+                loss_kwargs.sigma_min, loss_kwargs.sigma_max, loss_kwargs.rho)
+    elif loss_kwargs.class_name == 'training.loss.DDIMDistillationLoss':
+        from training.loss import DDIMDistillationLoss
+        loss_fn = DDIMDistillationLoss(teacher_net, device, loss_kwargs.ratio, loss_kwargs.num_steps, 
+                loss_kwargs.sigma_min, loss_kwargs.sigma_max, loss_kwargs.rho)
     else:
         loss_fn = dnnlib.util.construct_class_by_name(**loss_kwargs) # training.loss.(VP|VE|EDM)Loss
+    #建立target可视化的文件夹 如果有 先删除
+    if os.path.exists('./target_images'):
+        shutil.rmtree('./target_images')  
+    os.mkdir('./target_images') 
     # Train.
+
     dist.print0(f'Training for {total_kimg} kimg...')
     dist.print0()
     cur_nimg = resume_kimg * 1000

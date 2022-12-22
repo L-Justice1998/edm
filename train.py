@@ -46,7 +46,7 @@ def parse_int_list(s):
 @click.option('--cond',          help='Train class-conditional model', metavar='BOOL',              type=bool, default=False, show_default=True)
 @click.option('--arch',          help='Network architecture', metavar='ddpmpp|ncsnpp|adm',          type=click.Choice(['ddpmpp', 'ncsnpp', 'adm']), default='ddpmpp', show_default=True)
 # 这里新加的edm-distillation的loss function
-@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|edm_distillation',       type=click.Choice(['vp', 've', 'edm','edm_distillation']), default='edm', show_default=True)
+@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|edm_distillation|edm_distillation1|DDIM_distillation',       type=click.Choice(['vp', 've', 'edm','edm_distillation','edm_distillation1','DDIM_distillation']), default='edm', show_default=True)
 
 # Hyperparameters.
 @click.option('--duration',      help='Training duration', metavar='MIMG',                          type=click.FloatRange(min=0, min_open=True), default=200, show_default=True)
@@ -148,6 +148,23 @@ def main(**kwargs):
         c.loss_kwargs.sigma_max = opts.sigma_max
         c.loss_kwargs.ratio= opts.ratio
 
+    elif opts.precond == 'edm_distillation1' :
+        c.network_kwargs.class_name = 'training.networks.EDMPrecond'
+        c.loss_kwargs.class_name = 'training.loss.EDMDistillationLoss1'
+        c.loss_kwargs.num_steps = opts.num_steps
+        c.loss_kwargs.rho = opts.rho
+        c.loss_kwargs.sigma_min = opts.sigma_min
+        c.loss_kwargs.sigma_max = opts.sigma_max
+        c.loss_kwargs.ratio= opts.ratio
+        
+    elif opts.precond == 'DDIM_distillation' :
+        c.network_kwargs.class_name = 'training.networks.iDDPMPrecond'
+        c.loss_kwargs.class_name = 'training.loss.DDIMDistillationLoss'
+        c.loss_kwargs.num_steps = opts.num_steps
+        c.loss_kwargs.rho = opts.rho
+        c.loss_kwargs.sigma_min = opts.sigma_min
+        c.loss_kwargs.sigma_max = opts.sigma_max
+        c.loss_kwargs.ratio= opts.ratio
     else:
         assert opts.precond == 'edm'
         c.network_kwargs.class_name = 'training.networks.EDMPrecond'

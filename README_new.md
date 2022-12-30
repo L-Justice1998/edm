@@ -121,7 +121,7 @@ transfer 表示的是从哪里获得老师模型</p>
     --steps=32
 
 ## 对生成的图片fid测试
-    torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-edm-distillation-32-16-002509  \
+    torchrun --standalone --nproc_per_node=1 fid.py calc --images=fid-tmp-images/fid-tmp-edm-distillation-32-16-002509  \
         --ref=https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz
 
 测得结果是2.93074
@@ -190,26 +190,29 @@ transfer 表示的是从哪里获得老师模型</p>
 
 ## 进行64步到32步的蒸馏 只用五千张图
 
-    CUDA_VISIBLE_DEVICES=2,3  torchrun --standalone --nproc_per_node=2 train.py --outdir=training-runs-new \
-    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=DDIM_distillation --batch-gpu=64 --duration=5  --num_steps=64 --ratio=2\ 
+    CUDA_VISIBLE_DEVICES=0,1,2,3  torchrun --standalone --nproc_per_node=4 train.py --outdir=training-runs-new \
+    --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=DDIM_distillation \
+    --batch-gpu=128  --duration=0.1  --num_steps=64 --ratio=2\ 
     --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
+
+    加了ratio能正常运行 没加ratio会说got unexpected argument
     
 ## 无意中运行了下面的训练 发现很快收敛 这个是将4NFE到1NFE的 初始是64步
     CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --standalone --nproc_per_node=4 train.py --outdir=training-runs-test \
     --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=edm_distillation \
-    --batch-gpu=128 --duration=0.3  --num_steps=32 --ratio=2\ 
+    --batch-gpu=128 --duration=0.1  --num_steps=32 --ratio=2\ 
     --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
     这样训练是不行的 加了ratio之后loss大概变化20->8->2->0.8->0.01 采样变成噪声
 
     CUDA_VISIBLE_DEVICES=0,1,2,3  torchrun --standalone --nproc_per_node=4 train.py --outdir=training-runs-test \
     --data=datasets/cifar10-32x32.zip --cond=0 --arch=ddpmpp --precond=edm_distillation \
-    --batch-gpu=128 --duration=0.3  --num_steps=32 \
+    --batch-gpu=128 --duration=0.1  --num_steps=32 \
     --transfer=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl
     这样训练是好的,和gpu个数没有关系,loss大概变化20->13->6 采样是正确的
 
+    为什么加了ratio就不行？？？
 
-
-
+## 一些test ignore
     torchrun --standalone --nproc_per_node=4 generate.py --outdir=fid-tmp-edm-32-16-000300-new --seeds=0-10 --subdirs \
         --network='./distilltion_model/network-snapshot-32-16-000300-new.pkl' \
         --steps=32 --ratio=2 --sampler=edm_distillation_sampler
@@ -219,7 +222,7 @@ transfer 表示的是从哪里获得老师模型</p>
         --steps=32 --ratio=2 --sampler=edm_distillation_sampler
 
     torchrun --standalone --nproc_per_node=4 generate.py --outdir=test --seeds=0-10 --subdirs \
-        --network='training-runs-test/00002-cifar10-32x32-uncond-ddpmpp-edm_distillation-gpus4-batch512-fp32/network-snapshot-000300.pkl' \
+        --network='training-runs-test/00016-cifar10-32x32-uncond-ddpmpp-edm_distillation-gpus4-batch512-fp32/network-snapshot-000100.pkl' \
         --steps=32 --ratio=2 --sampler=edm_distillation_sampler
     
     
